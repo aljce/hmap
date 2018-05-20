@@ -2,7 +2,7 @@ open import Data.Nat using (ℕ; pred)
 open ℕ
 open import Data.Product using (_×_; _,_)
 
-module Data.AVL.Height where
+module Data.Map.Height where
 
 infix 4 max_↦_
 data max_↦_ : ℕ × ℕ -> ℕ -> Set where

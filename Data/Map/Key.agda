@@ -1,8 +1,8 @@
-open import Relation.Binary using
-  (Rel; IsStrictTotalOrder; Transitive)
+open import Relation.Binary
+  using (Rel; IsStrictTotalOrder; Transitive)
 open import Relation.Binary.PropositionalEquality using (_≡_)
 
-module Data.AVL.Key
+module Data.Map.Key
   {k r} (Key : Set k) {_<_ : Rel Key r}
   (is-strict-total-order : IsStrictTotalOrder _≡_ _<_) where
 

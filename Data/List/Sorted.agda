@@ -1,74 +1,96 @@
-open import Relation.Binary using (Rel; IsStrictTotalOrder)
-open import Relation.Binary.PropositionalEquality using (_≡_)
+open import Relation.Binary using
+  (Rel; IsStrictTotalOrder; IsDecTotalOrder)
+open import Relation.Binary.PropositionalEquality using (_≡_; refl)
 
 open import Level using (_⊔_)
+open import Data.Sum using (inj₁)
 open import Data.List using (List; foldr)
 open List
 open import Relation.Binary using (Tri)
 open Tri
+open import Relation.Binary.Core using (_⇒_)
+open import Relation.Binary.PropositionalEquality as EQ
+open EQ.≡-Reasoning
 
 module Data.List.Sorted
   {a r} (A : Set a) {_<_ : Rel A r}
-  (is-strict-total-order : IsStrictTotalOrder _≡_ _<_) where
+  (isStrictTotalOrder : IsStrictTotalOrder _≡_ _<_) where
 
-open IsStrictTotalOrder is-strict-total-order
+open IsStrictTotalOrder isStrictTotalOrder
+open import Relation.Binary.StrictToNonStrict _≡_ _<_
+  using (_≤_; reflexive; isDecTotalOrder)
+open IsDecTotalOrder (isDecTotalOrder isStrictTotalOrder)
+  using () renaming (trans to ≤-trans)
 
-postulate
-  undefined : ∀ {a} {A : Set a} -> A
+↑_ : _<_ ⇒ _≤_
+↑ i<j = inj₁ i<j
 
-infixr 5 _<*_
-data _<*_ (x : A) : List A -> Set (a ⊔ r) where
-  <[]  : x <* []
-  <∷_ : ∀ {y} {ys} -> x < y -> x <* y ∷ ys
+infixr 5 _≤*_
+data _≤*_ (x : A) : List A -> Set (a ⊔ r) where
+  ≤[]  : x ≤* []
+  _≤∷_ : ∀ {y} {ys} -> x ≤ y -> x ≤* ys -> x ≤* y ∷ ys
 
-data Ascending : List A -> Set (a ⊔ r) where
-  []  : Ascending []
-  _∷_ : ∀ {x} {xs} -> x <* xs -> Ascending xs -> Ascending (x ∷ xs)
+≤*-lower : ∀ {x y} {ys} -> x ≤ y -> y ≤* ys -> x ≤* ys
+≤*-lower x≤y ≤[] = ≤[]
+≤*-lower x≤y (y≤z ≤∷ y≤*ys) = ≤-trans x≤y y≤z ≤∷ ≤*-lower x≤y y≤*ys
 
 data _◂_≡_ (x : A) : List A → List A → Set a where
   here  : ∀ {xs}           → x ◂ xs ≡ (x ∷ xs)
   there : ∀ {y} {xs} {xys} → x ◂ xs ≡ xys → x ◂ (y ∷ xs) ≡ (y ∷ xys)
 
-data Permutation : List A → List A → Set a where
-  []  : Permutation [] []
-  _∷_ : ∀ {x xs ys xys}
-      → x ◂ ys ≡ xys
-      → Permutation xs ys
-      → Permutation (x ∷ xs) xys
+data Sorted : List A -> Set (a ⊔ r) where
+  nil  : Sorted []
+  cons : ∀ x {xs xys} -> x ≤* xs -> x ◂ xs ≡ xys -> Sorted xs -> Sorted xys
 
-record Sorted (xs : List A) : Set (a ⊔ r) where
-  constructor sorted
-  field
-    ys : List A
-    is-ascending : Ascending ys
-    is-permutation : Permutation ys xs
+sorted-list : ∀ {xs} -> Sorted xs -> List A
+sorted-list nil = []
+sorted-list (cons x _ _ xs) = x ∷ sorted-list xs
 
-empty-list-is-sorted : Sorted []
-empty-list-is-sorted = record { ys = [] ; is-ascending = [] ; is-permutation = [] }
+≤*-insert : ∀ {x y} {ys xs} -> y ◂ ys ≡ xs -> x ≤ y -> x ≤* ys -> x ≤* xs
+≤*-insert here x≤y x≤*ys = x≤y ≤∷ x≤*ys
+≤*-insert (there p) x≤y (x≤z ≤∷ x≤*ys) = x≤z ≤∷ ≤*-insert p x≤y x≤*ys
 
-insert : A -> List A -> List A
-insert x [] = x ∷ []
-insert x (y ∷ ys) with compare x y
-... | tri> _ _ _ = y ∷ insert x ys
-... | _          = x ∷ y ∷ ys
-
-insert-preserves-sorted : ∀ {xs} x -> Sorted xs -> Sorted (x ∷ xs)
-insert-preserves-sorted {xs} x (sorted ys ys-asc ys-perm) =
-  sorted (insert x ys) (insert-preserves-ascending ys-asc) (insert-preserves-perm ys-perm)
-  where
-  insert-preserves-ascending : ∀ {zs} -> Ascending zs -> Ascending (insert x zs)
-  insert-preserves-ascending [] = <[] ∷ []
-  insert-preserves-ascending (_∷_ {z} {zs} z<*zs zs-asc) with compare x z
-  ... | tri< x<z _ _ = (<∷ x<z) ∷ z<*zs ∷ zs-asc
-    -- where
-    -- insert-preserves-<* : ∀ {z} {zs} -> z <* zs -> z <* insert x zs
-    -- insert-preserves-<* <[] = <∷ {!!}
-    -- insert-preserves-<* (<∷ x₁) = {!!}
-  ... | tri≈ _ _ _ = {!!} ∷ {!!}
-  ... | tri> _ _ _ = {!!} ∷ {!!}
-  insert-preserves-perm : Permutation ys xs -> Permutation (insert x ys) (x ∷ xs)
-  insert-preserves-perm perm = undefined
+insert : ∀ x {xs} -> Sorted xs -> Sorted (x ∷ xs)
+insert x nil = cons x ≤[] here nil
+insert x {xs} sorted-xs@(cons y {ys} {xys} y≤*ys y◂ys≡yxs sorted-ys) with compare x y
+... | tri< x<y _ _ = cons x (≤*-insert y◂ys≡yxs x≤y (≤*-lower x≤y y≤*ys)) here sorted-xs
+  where x≤y = ↑ x<y
+... | tri≈ _ x≡y _ = cons x (≤*-insert y◂ys≡yxs x≤y (≤*-lower x≤y y≤*ys)) here sorted-xs
+  where x≤y = reflexive x≡y
+... | tri> _ _ y<x = cons y (y≤x ≤∷ y≤*ys) (there y◂ys≡yxs) (insert x sorted-ys)
+  where y≤x = ↑ y<x
 
 insertion-sort : ∀ xs -> Sorted xs
-insertion-sort [] = empty-list-is-sorted
-insertion-sort (x ∷ xs) = insert-preserves-sorted x (insertion-sort xs)
+insertion-sort [] = nil
+insertion-sort (x ∷ xs) = insert x (insertion-sort xs)
+
+-- smallest-placed-equal : ∀ {a b} {as bs xs} -> a ≤* as -> b ≤* bs -> a ◂ as ≡ xs -> b ◂ bs ≡ xs -> a ≡ b
+-- smallest-placed-equal a b c d = {!!}
+
+-- sorted-unique : ∀ {xs} (as bs : Sorted xs) -> sorted-list as ≡ sorted-list bs
+-- sorted-unique nil nil = refl
+-- sorted-unique nil (cons b b≤bs () sorted-bs)
+-- sorted-unique (cons a a≤*as () sorted-as) nil
+-- sorted-unique (cons a {as} a≤*as a◂as≡xs sorted-as) (cons b {bs} b≤*bs b◂bs≡xs sorted-bs) =
+--   cong₂ _∷_ a≡b rec
+--   where
+--   a≡b : a ≡ b
+--   a≡b =
+--     begin a
+--     ≡⟨ smallest-placed-equal a≤*as b≤*bs a◂as≡xs b◂bs≡xs ⟩
+--     b ∎
+--   as≡bs : as ≡ bs
+--   as≡bs =
+--     begin as
+--     ≡⟨ {!!} ⟩
+--     bs ∎
+--   asequalbs = as≡bs
+--   rec : sorted-list sorted-as ≡ sorted-list sorted-bs
+--   rec =
+--     begin
+--       (sorted-list sorted-as)
+--     ≡⟨ sorted-unique sorted-as (subst Sorted (sym as≡bs) sorted-bs) ⟩
+--       sorted-list (subst Sorted (sym as≡bs) sorted-bs)
+--     ≡⟨ {!!} ⟩
+--     (sorted-list sorted-bs) ∎
+
