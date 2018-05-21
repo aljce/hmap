@@ -109,6 +109,24 @@ insert x (y ∷ ys) with compare x y
 <-raise x<y (inj₁ y<z) = <-trans x<y y<z
 <-raise x<y (inj₂ y≡z) rewrite y≡z = x<y
 
+insert-< : ∀ {key₁ key₂} {ks} -> key₁ < key₂ -> insert key₁ ([ key₂ ] ++ ks) ≡ key₁ ∷ key₂ ∷ ks
+insert-< {key₁} {key₂} key₁<key₂ with compare key₁ key₂
+... | tri< _ _ _          = refl
+... | tri≈ ¬key₁<key₂ _ _ = ⊥-elim (¬key₁<key₂ key₁<key₂)
+... | tri> ¬key₁<key₂ _ _ = ⊥-elim (¬key₁<key₂ key₁<key₂)
+
+insert-≡ : ∀ {key} {ks} -> insert key ([ key ] ++ ks) ≡ [ key ] ++ ks
+insert-≡ {key} with compare key key
+... | tri< _ ¬key≡key _ = ⊥-elim (¬key≡key refl)
+... | tri≈ _ _ _        = refl
+... | tri> _ ¬key≡key _ = ⊥-elim (¬key≡key refl)
+
+insert-> : ∀ {key₁ key₂} {ks} -> key₂ < key₁ -> insert key₁ ([ key₂ ] ++ ks) ≡ key₂ ∷ insert key₁ ks
+insert-> {key₁} {key₂} key₂<key₁ with compare key₁ key₂
+... | tri< _ _ ¬key₂<key₁ = ⊥-elim (¬key₂<key₁ key₂<key₁)
+... | tri≈ _ _ ¬key₂<key₁ = ⊥-elim (¬key₂<key₁ key₂<key₁)
+... | tri> _ _ _          = refl
+
 insert-move-right
   : ∀ {key₁} {key₂} left right
   -> key₁ ≤ key₂
@@ -126,63 +144,47 @@ insert-move-right {key₁} {key₂} (l ∷ left) right key₁≤key₂ (l<key₁
 ... | tri≈ _ _ ¬l<key₂ = ⊥-elim (¬l<key₂ (<-raise l<key₁ key₁≤key₂))
 ... | tri> _ _ _ = cong (λ ls → l ∷ ls) (insert-move-right left right key₁≤key₂ left<key₁)
 
-insertⁱ
-  : ∀ key left right
-  -> All (λ x -> x < key) left
-  -> insert key (left ++ [ key ] ++ right) ≡ left ++ [ key ] ++ right
-insertⁱ key left right left<key
-  rewrite insert-move-right left right (reflexive refl) left<key with compare key key
-... | tri< _ ¬key≡key _ = ⊥-elim (¬key≡key refl)
-... | tri≈ _ _ _        = refl
-... | tri> _ ¬key≡key _ = ⊥-elim (¬key≡key refl)
-
 insert-leftⁱ
   : ∀ {key₁ key₂} left right
   -> key₁ < key₂
   -> insert key₁ (left ++ [ key₂ ] ++ right) ≡ insert key₁ left ++ [ key₂ ] ++ right
-insert-leftⁱ {key₁} {key₂} [] right key₁<key₂ with compare key₁ key₂
-... | tri< _ _ _          = refl
-... | tri≈ ¬key₁<key₂ _ _ = ⊥-elim (¬key₁<key₂ key₁<key₂)
-... | tri> ¬key₁<key₂ _ _ = ⊥-elim (¬key₁<key₂ key₁<key₂)
+insert-leftⁱ [] right key₁<key₂ = insert-< key₁<key₂
 insert-leftⁱ {key₁} {key₂} (l ∷ left) right key₁<key₂ with compare key₁ l
 ... | tri< _ _ _ = refl
 ... | tri≈ _ _ _ = refl
 ... | tri> _ _ _ = cong (λ ls → l ∷ ls) (insert-leftⁱ left right key₁<key₂)
 
-insert-< : ∀ {key₁ key₂} {xs} -> key₁ < key₂ -> insert key₁ ([ key₂ ] ++ xs) ≡ key₁ ∷ key₂ ∷ xs
-insert-< = undefined
-
-insert-> : ∀ {key₁ key₂} {xs} -> key₂ < key₁ -> insert key₁ ([ key₂ ] ++ xs) ≡ key₂ ∷ key₁ ∷ xs
-insert-> {key₁} {key₂} key₂<key₁ with compare key₂ key₁
-... | tri< _ _ ¬key₂<key₁ = ⊥-elim (¬key₂<key₁ undefined)
-... | tri≈ _ _ ¬key₂<key₁ = ⊥-elim undefined
-... | tri> _ _ _ = undefined
-
+insertⁱ
+  : ∀ key left right
+  -> All (λ x -> x < key) left
+  -> insert key (left ++ [ key ] ++ right) ≡ left ++ [ key ] ++ right
+insertⁱ key left right left<key =
+  insert key (left ++ [ key ] ++ right) ≡⟨ insert-move-right left right (reflexive refl) left<key ⟩
+  left ++ insert key ([ key ] ++ right) ≡⟨ cong (λ r → left ++ r) insert-≡ ⟩
+  left ++ [ key ] ++ right ∎
 
 insert-rightⁱ
   : ∀ {key₁ key₂} left right
   -> key₂ < key₁
   -> All (λ x → x < key₂) left
   -> insert key₁ (left ++ [ key₂ ] ++ right) ≡ left ++ [ key₂ ] ++ insert key₁ right
-insert-rightⁱ {key₁} {key₂} left [] key₂<key₁ left<key₂ =
-  insert key₁ (left ++ [ key₂ ] ++ [])   ≡⟨ insert-move-right left [] (inj₁ key₂<key₁) left<key₂ ⟩
-  left ++ (insert key₁ ([ key₂ ] ++ [])) ≡⟨ cong (λ r → left ++ r) (insert-> key₂<key₁)  ⟩
-  left ++ [ key₂ ] ++ insert key₁ [] ∎
-insert-rightⁱ {key₁} {key₂} left (r ∷ right) key₂<key₁ = undefined
+insert-rightⁱ {key₁} {key₂} left right key₂<key₁ left<key₂ =
+  insert key₁ (left ++ [ key₂ ] ++ right)   ≡⟨ insert-move-right left right (inj₁ key₂<key₁) left<key₂ ⟩
+  left ++ (insert key₁ ([ key₂ ] ++ right)) ≡⟨ cong (λ r → left ++ r) (insert-> key₂<key₁)  ⟩
+  left ++ [ key₂ ] ++ insert key₁ right ∎
 
 insertWith
-  : ∀ {h} {l-bound r-bound} {xs}
+  : ∀ {h} {l-bound r-bound} {ks}
   -> (key : Key)
   -> V key
   -> (V key -> V key -> V key)
   -> l-bound < key < r-bound
-  -> AVL l-bound r-bound h xs
-  -> Insert l-bound r-bound h (insert key xs)
+  -> AVL l-bound r-bound h ks
+  -> Insert l-bound r-bound h (insert key ks)
 insertWith key₁ value₁ update
   l-bound<key<r-bound (Leaf l-bound<r-bound)
   = +one (singleton key₁ value₁ l-bound<key<r-bound)
-insertWith key₁ value₁ update
-  (l-bound<key <×< key<r-bound)
+insertWith key₁ value₁ update (l-bound<key <×< key<r-bound)
   (Node {l-left = l-left} {l-right = l-right} key₂ value₂ left₁ right₁ bal) with compare key₁ key₂
 ... | tri< key₁<key₂ _ _ rewrite insert-leftⁱ l-left l-right key₁<key₂
     = merge-leftⁱ key₂ value₂ left₂ right₁ bal
