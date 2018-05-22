@@ -11,8 +11,10 @@ open ℕ
 open import Data.Product using (_,_)
 open import Data.List using (List; _++_)
 open List
-open import Data.List.All using (All)
+open import Data.List.Properties using (++-assoc)
+open import Data.List.All using (All; map)
 open All
+open import Data.List.All.Properties using (++⁺)
 open import Data.Maybe using (Maybe)
 open Maybe
 open import Data.Empty using (⊥-elim)
@@ -31,13 +33,8 @@ open import Relation.Binary.StrictToNonStrict _≡_ _<_
 open IsPartialOrder (isPartialOrder isStrictPartialOrder)
   using () renaming (antisym to ≤-antisym)
 
-
-
 open import Data.Map.Key Key isStrictTotalOrder public
 open import Data.Map.Height public
-
-postulate
-  undefined : ∀ {a} {A : Set a} -> A
 
 [_] : ∀ {a} {A : Set a} -> A -> List A
 [ x ] = x ∷ []
@@ -45,7 +42,7 @@ postulate
 data AVL (l-bound r-bound : Bound) : (height : ℕ) -> (keys : List Key) -> Set (k ⊔ r ⊔ v) where
   Leaf : l-bound <ᵇ r-bound -> AVL l-bound r-bound 0 []
   Node :
-    ∀ {h-left h-right h l-left l-right}
+    ∀ {l-left l-right h-left h-right h}
       (key     : Key)
       (value   : V key)
       (left    : AVL l-bound ⟨ key ⟩ h-left  l-left)
@@ -74,30 +71,128 @@ data Insert (l-bound r-bound : Bound) (height : ℕ) (xs : List Key) : Set (k �
   +zero : AVL l-bound r-bound height xs       -> Insert l-bound r-bound height xs
   +one  : AVL l-bound r-bound (suc height) xs -> Insert l-bound r-bound height xs
 
+++-assoc-left : ∀ (as bs cs ds : List Key) -> (as ++ (bs ++ cs)) ++ ds ≡ (as ++ bs) ++ (cs ++ ds)
+++-assoc-left as bs cs ds =
+  (as ++ (bs ++ cs)) ++ ds ≡⟨ cong (λ l → l ++ ds) (sym (++-assoc as bs cs)) ⟩
+  ((as ++ bs) ++ cs) ++ ds ≡⟨ ++-assoc (as ++ bs) cs ds ⟩
+  (as ++ bs) ++ (cs ++ ds) ∎
+
+++-assoc-right : ∀ (as bs cs ds : List Key) -> as ++ (bs ++ cs) ++ ds ≡ (as ++ bs) ++ (cs ++ ds)
+++-assoc-right as bs cs ds =
+  as ++ (bs ++ cs) ++ ds   ≡⟨ cong (λ r → as ++ r) (++-assoc bs cs ds) ⟩
+  as ++ bs ++ (cs ++ ds)   ≡⟨ sym (++-assoc as bs (cs ++ ds)) ⟩
+  (as ++ bs) ++ (cs ++ ds) ∎
+
 merge-leftⁱ
-  : ∀ {h-left h-right h}
-  {l-bound r-bound}
-  {l-left l-right}
+  : ∀ {l-left l-right} {h-left h-right h} {l-bound r-bound}
   (key : Key)
   -> V key
   -> Insert l-bound ⟨ key ⟩ h-left l-left
   -> AVL ⟨ key ⟩ r-bound h-right l-right
   -> max (h-left , h-right) ↦ h
   -> Insert l-bound r-bound (suc h) (l-left ++ [ key ] ++ l-right)
-merge-leftⁱ = undefined
+merge-leftⁱ key₁ value₁ (+zero left₁) right₁ bal₁ = +zero (Node key₁ value₁ left₁ right₁ bal₁)
+merge-leftⁱ key₁ value₁ (+one left₁) right₁ ↦r = +zero (Node key₁ value₁ left₁ right₁ ↦b)
+merge-leftⁱ key₁ value₁ (+one left₁) right₁ ↦b = +one (Node key₁ value₁ left₁ right₁ ↦l)
+--           1      =>      2
+--          / \            / \
+--         /   \          /   \
+--        2    R1        L2    1
+--       / \             |    / \
+--      /   \                /   \
+--     L2    R2             R2   R1
+--     |
+merge-leftⁱ {_} {l-right₁} key₁ value₁
+  (+one (Node {l-left₂} {l-right₂} key₂ value₂ left₂ right₂ ↦l)) right₁ ↦l
+  rewrite ++-assoc l-left₂ (key₂ ∷ l-right₂) (key₁ ∷ l-right₁)
+  = +zero (Node key₂ value₂ left₂ (Node key₁ value₁ right₂ right₁ ↦b) ↦b)
+--           1      =>      2
+--          / \            / \
+--         /   \          /   \
+--        2    R1        L2    1
+--       / \                  / \
+--      /   \                /   \
+--     L2    R2             R2   R1
+merge-leftⁱ {_} {l-right₁} key₁ value₁
+  (+one (Node {l-left₂} {l-right₂} key₂ value₂ left₂ right₂ ↦b)) right₁ ↦l
+  rewrite ++-assoc l-left₂ (key₂ ∷ l-right₂) (key₁ ∷ l-right₁)
+  = +one (Node key₂ value₂ left₂ (Node key₁ value₁ right₂ right₁ ↦l) ↦r)
+--          1       =>      3
+--         / \             / \
+--        /   \           /   \
+--       2    R1         2     1
+--      / \             / \   / \
+--     /   \           /   \ /   \
+--    L2   3          L2  L3 R3  R1
+--        / \
+--       /   \
+--      L3   R3
+merge-leftⁱ {_} {l-right₁} key₁ value₁
+  (+one (Node {l-left₂} key₂ value₂
+          left₂
+          (Node {l-left₃} {l-right₃} key₃ value₃ left₃ right₃ bal₃)
+        ↦r))
+  right₁ ↦l
+  rewrite ++-assoc-left l-left₂ (key₂ ∷ l-left₃) (key₃ ∷ l-right₃) (key₁ ∷ l-right₁)
+  =  +zero (Node key₃ value₃
+             (Node key₂ value₂ left₂  left₃  (max[h,l]↦h bal₃))
+             (Node key₁ value₁ right₃ right₁ (max[r,h]↦h bal₃))
+           ↦b)
 
 merge-rightⁱ
-  : ∀ {h-left h-right h}
-  {l-bound r-bound}
-  {l-left l-right}
+  : ∀ {l-left l-right} {h-left h-right h} {l-bound r-bound}
   (key : Key)
   -> V key
   -> AVL l-bound ⟨ key ⟩ h-left l-left
   -> Insert ⟨ key ⟩ r-bound h-right l-right
   -> max (h-left , h-right) ↦ h
   -> Insert l-bound r-bound (suc h) (l-left ++ [ key ] ++ l-right)
-merge-rightⁱ = undefined
-
+merge-rightⁱ key₁ value₁ left₁ (+zero right₁) bal₁ = +zero (Node key₁ value₁ left₁ right₁ bal₁)
+merge-rightⁱ key₁ value₁ left₁ (+one right₁) ↦l = +zero (Node key₁ value₁ left₁ right₁ ↦b)
+merge-rightⁱ key₁ value₁ left₁ (+one right₁) ↦b = +one (Node key₁ value₁ left₁ right₁ ↦r)
+--           1      =>       2
+--          / \             / \
+--         /   \           /   \
+--        L1    2         1    R2
+--             / \       / \   |
+--            /   \     /   \
+--           L2   R2   L2   L1
+--                |
+merge-rightⁱ {l-left₁} key₁ value₁ left₁
+  (+one (Node {l-left₂} {l-right₂} key₂ value₂ left₂ right₂ ↦r)) ↦r
+  rewrite sym (++-assoc l-left₁ (key₁ ∷ l-left₂) (key₂ ∷ l-right₂))
+  =  +zero (Node key₂ value₂ (Node key₁ value₁ left₁ left₂ ↦b) right₂ ↦b)
+--           1      =>       2
+--          / \             / \
+--         /   \           /   \
+--        L1    2         1    R2
+--             / \       / \
+--            /   \     /   \
+--           L2   R2   L2   L1
+merge-rightⁱ {l-left₁} key₁ value₁ left₁
+  (+one (Node {l-left₂} {l-right₂} key₂ value₂ left₂ right₂ ↦b)) ↦r
+  rewrite sym (++-assoc l-left₁ (key₁ ∷ l-left₂) (key₂ ∷ l-right₂))
+  =  +one (Node key₂ value₂ (Node key₁ value₁ left₁ left₂ ↦r) right₂ ↦l)
+--           1      =>       3
+--          / \             / \
+--         /   \           /   \
+--        L1    2         1     2
+--             / \       / \   / \
+--            /   \     /   \ /   \
+--           3    R2   L1  L3 R3  R2
+--          / \
+--         /   \
+--        L3   R3
+merge-rightⁱ {l-left₁} {l-right₁} {h = h} {l-bound = l-bound} {r-bound = r-bound} key₁ value₁ left₁
+  (+one (Node {_} {l-right₂} key₂ value₂
+          (Node {l-left₃} {l-right₃} key₃ value₃ left₃ right₃ bal₃)
+          right₂
+        ↦l)) ↦r
+  rewrite ++-assoc-right l-left₁ (key₁ ∷ l-left₃) (key₃ ∷ l-right₃) (key₂ ∷ l-right₂)
+  = +zero (Node key₃ value₃
+            (Node key₁ value₁ left₁  left₃  (max[h,l]↦h bal₃))
+            (Node key₂ value₂ right₃ right₂ (max[r,h]↦h bal₃))
+          ↦b)
 insert : Key -> List Key -> List Key
 insert x [] = x ∷ []
 insert x (y ∷ ys) with compare x y
@@ -169,9 +264,40 @@ insert-rightⁱ
   -> All (λ x → x < key₂) left
   -> insert key₁ (left ++ [ key₂ ] ++ right) ≡ left ++ [ key₂ ] ++ insert key₁ right
 insert-rightⁱ {key₁} {key₂} left right key₂<key₁ left<key₂ =
-  insert key₁ (left ++ [ key₂ ] ++ right)   ≡⟨ insert-move-right left right (inj₁ key₂<key₁) left<key₂ ⟩
+  insert key₁ (left ++ [ key₂ ] ++ right)   ≡⟨ insert-move-right left right key₂≤key₁ left<key₂ ⟩
   left ++ (insert key₁ ([ key₂ ] ++ right)) ≡⟨ cong (λ r → left ++ r) (insert-> key₂<key₁)  ⟩
   left ++ [ key₂ ] ++ insert key₁ right ∎
+  where key₂≤key₁ = inj₁ key₂<key₁
+
+all<r-bound
+  : ∀ {h} {l-bound} {key} {ks}
+  -> AVL l-bound ⟨ key ⟩ h ks
+  -> All (λ x → x < key) ks
+all<r-bound tree = list (loop tree)
+  where
+  record Return (l-bound : Bound) (key : Key) (ks : List Key) : Set (k ⊔ r ⊔ v) where
+    constructor ret
+    field
+      list : All (λ x → x < key) ks
+      l-bound<key : l-bound <ᵇ ⟨ key ⟩
+  open Return
+  loop : ∀ {l-bound} {key} {ks} {h} -> AVL l-bound ⟨ key ⟩ h ks -> Return l-bound key ks
+  loop (Leaf l-bound<key) = record { list = [] ; l-bound<key = l-bound<key }
+  loop {l-bound} {key₁} (Node {l-left = l-left} {l-right = l-right} key₂ value left right balance) =
+    ret ks<key₂ l-bound<key₁
+    where
+    l-ret : Return l-bound key₂ l-left
+    l-ret = loop left
+    r-ret : Return ⟨ key₂ ⟩ key₁ l-right
+    r-ret = loop right
+    key₂<key₁ : key₂ < key₁
+    key₂<key₁ = lowerᵇ (l-bound<key r-ret)
+    l-all : All (λ x → x < key₁) l-left
+    l-all = map (λ x<key₂ → <-trans x<key₂ key₂<key₁) (list l-ret)
+    ks<key₂ : All (λ x → x < key₁) (l-left ++ [ key₂ ] ++ l-right)
+    ks<key₂ = ++⁺ {xs = l-left} l-all (++⁺ (key₂<key₁ ∷ []) (list r-ret))
+    l-bound<key₁ : l-bound <ᵇ ⟨ key₁ ⟩
+    l-bound<key₁ = <ᵇ-trans (l-bound<key l-ret) (l-bound<key r-ret)
 
 insertWith
   : ∀ {h} {l-bound r-bound} {ks}
@@ -189,8 +315,8 @@ insertWith key₁ value₁ update (l-bound<key <×< key<r-bound)
 ... | tri< key₁<key₂ _ _ rewrite insert-leftⁱ l-left l-right key₁<key₂
     = merge-leftⁱ key₂ value₂ left₂ right₁ bal
     where left₂ = insertWith key₁ value₁ update (l-bound<key <×< ⟨ key₁<key₂ ⟩) left₁
-... | tri≈ _ key₁≡key₂ _ rewrite key₁≡key₂ | insertⁱ key₂ l-left l-right undefined
+... | tri≈ _ key₁≡key₂ _ rewrite key₁≡key₂ | insertⁱ key₂ l-left l-right (all<r-bound left₁)
     = +zero (Node key₂ (update value₁ value₂) left₁ right₁ bal)
-... | tri> _ _ key₂<key₁ rewrite insert-rightⁱ l-left l-right key₂<key₁ undefined
+... | tri> _ _ key₂<key₁ rewrite insert-rightⁱ l-left l-right key₂<key₁ (all<r-bound left₁)
     = merge-rightⁱ key₂ value₂ left₁ right₂ bal
     where right₂ = insertWith key₁ value₁ update (⟨ key₂<key₁ ⟩ <×< key<r-bound) right₁

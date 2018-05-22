@@ -21,13 +21,16 @@ data _<ᵇ_ : Bound -> Bound -> Set r where
   _<+∞ : (bot : Key) -> ⟨ bot ⟩ <ᵇ +∞
   -∞<+∞ : -∞ <ᵇ +∞
 
-<ᵇ-transitive : Transitive _<ᵇ_
-<ᵇ-transitive {k = ⟨ top ⟩} (-∞< bot) ⟨ bot<top ⟩ = -∞< top
-<ᵇ-transitive (-∞< top) (.top <+∞) = -∞<+∞
-<ᵇ-transitive ⟨ bot<mid ⟩ ⟨ mid<top ⟩ = ⟨ trans bot<mid mid<top ⟩
-<ᵇ-transitive {i = ⟨ bot ⟩} ⟨ bot<top ⟩ (top <+∞) = bot <+∞
-<ᵇ-transitive (bot <+∞) ()
-<ᵇ-transitive -∞<+∞ ()
+<ᵇ-trans : Transitive _<ᵇ_
+<ᵇ-trans {k = ⟨ top ⟩} (-∞< bot) ⟨ bot<top ⟩ = -∞< top
+<ᵇ-trans (-∞< top) (.top <+∞) = -∞<+∞
+<ᵇ-trans ⟨ bot<mid ⟩ ⟨ mid<top ⟩ = ⟨ trans bot<mid mid<top ⟩
+<ᵇ-trans {i = ⟨ bot ⟩} ⟨ bot<top ⟩ (top <+∞) = bot <+∞
+<ᵇ-trans (bot <+∞) ()
+<ᵇ-trans -∞<+∞ ()
+
+lowerᵇ : ∀ {x y} -> ⟨ x ⟩ <ᵇ ⟨ y ⟩ -> x < y
+lowerᵇ ⟨ x<y ⟩ = x<y
 
 infix 3 _<×<_
 record _<_<_ (l-bound : Bound) (key : Key) (r-bound : Bound) : Set r where
@@ -36,3 +39,7 @@ record _<_<_ (l-bound : Bound) (key : Key) (r-bound : Bound) : Set r where
     lower : l-bound <ᵇ ⟨ key ⟩
     upper : ⟨ key ⟩ <ᵇ r-bound
 open _<_<_ public
+
+open-bounds : ∀ (key : Key) -> -∞ < key < +∞
+open-bounds key = -∞< key <×< key <+∞
+
