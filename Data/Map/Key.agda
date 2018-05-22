@@ -4,9 +4,9 @@ open import Relation.Binary.PropositionalEquality using (_≡_)
 
 module Data.Map.Key
   {k r} (Key : Set k) {_<_ : Rel Key r}
-  (is-strict-total-order : IsStrictTotalOrder _≡_ _<_) where
+  (isStrictTotalOrder : IsStrictTotalOrder _≡_ _<_) where
 
-open IsStrictTotalOrder is-strict-total-order
+open IsStrictTotalOrder isStrictTotalOrder
 
 data Bound : Set k where
   -∞  : Bound
